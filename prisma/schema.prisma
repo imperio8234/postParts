@@ -1,0 +1,693 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MULTITENANCY
+// ============================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String   // Nombre del negocio
+  slug      String   @unique // para subdomain o URL
+  nit       String?  // NIT del negocio
+  email     String
+  phone     String?
+  address   String?
+  city      String?
+  logo      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users             User[]
+  products          Product[]
+  customers         Customer[]
+  sales             Sale[]
+  cashRegisters     CashRegister[]
+  categories        Category[]
+  suppliers         Supplier[]
+  purchases         Purchase[]
+  expenses          Expense[]
+  expenseCategories ExpenseCategory[]
+  orders            Order[]
+  subscription      Subscription?
+
+  @@index([slug])
+}
+
+// ============================================
+// USUARIOS
+// ============================================
+
+model User {
+  id        String   @id @default(cuid())
+  tenantId  String?  // Null para super admins
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(SELLER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant        Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sales         Sale[]
+  cashRegisters CashRegister[]
+  purchases     Purchase[]
+  expenses      Expense[]
+  activityLogs  AdminActivityLog[]
+
+  @@index([tenantId])
+  @@index([email])
+}
+
+enum UserRole {
+  SUPER_ADMIN  // Super administrador de la plataforma
+  ADMIN        // Administrador del tenant
+  SELLER       // Vendedor del tenant
+  VIEWER       // Solo lectura del tenant
+}
+
+// ============================================
+// PRODUCTOS E INVENTARIO
+// ============================================
+
+model Category {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  tenantId    String
+  categoryId  String?
+  sku         String   // Código del repuesto
+  barcode     String?  // Código de barras
+  name        String
+  description String?
+  brand       String?  // Marca de la moto (Honda, Yamaha, etc)
+  model       String?  // Modelo compatible
+  year        String?  // Año compatible
+  costPrice   Decimal  @db.Decimal(10, 2) // Precio de costo
+  salePrice   Decimal  @db.Decimal(10, 2) // Precio de venta
+  stock       Int      @default(0)
+  minStock    Int      @default(5) // Alerta de stock mínimo
+  location    String?  // Ubicación física en bodega
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category      Category?    @relation(fields: [categoryId], references: [id])
+  saleItems     SaleItem[]
+  purchaseItems PurchaseItem[]
+  orderItems    OrderItem[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, barcode])
+  @@index([tenantId])
+  @@index([tenantId, brand])
+  @@index([stock]) // Para alertas de stock bajo
+}
+
+// ============================================
+// CLIENTES
+// ============================================
+
+model Customer {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  email     String?
+  phone     String?
+  idNumber  String?  // Cédula/DNI
+  address   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sales  Sale[]
+  orders Order[]
+
+  @@index([tenantId])
+  @@index([tenantId, phone])
+}
+
+// ============================================
+// CAJA (CASH REGISTER)
+// ============================================
+
+model CashRegister {
+  id              String             @id @default(cuid())
+  tenantId        String
+  userId          String             // Usuario que abrió la caja
+  openingDate     DateTime           @default(now())
+  closingDate     DateTime?
+  initialAmount   Decimal            @db.Decimal(10, 2) // Monto inicial en caja
+  finalAmount     Decimal?           @db.Decimal(10, 2) // Monto final al cerrar
+  expectedAmount  Decimal?           @db.Decimal(10, 2) // Calculado automáticamente
+  difference      Decimal?           @db.Decimal(10, 2) // Diferencia (faltante/sobrante)
+  status          CashRegisterStatus @default(OPEN)
+  notes           String?            // Notas del cierre
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+  sales  Sale[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([openingDate])
+}
+
+enum CashRegisterStatus {
+  OPEN
+  CLOSED
+}
+
+// ============================================
+// VENTAS
+// ============================================
+
+model Sale {
+  id             String        @id @default(cuid())
+  tenantId       String
+  cashRegisterId String
+  userId         String        // Vendedor
+  customerId     String?
+  saleNumber     String        // Número de factura/ticket
+  saleDate       DateTime      @default(now())
+  subtotal       Decimal       @db.Decimal(10, 2)
+  discount       Decimal       @default(0) @db.Decimal(10, 2)
+  tax            Decimal       @default(0) @db.Decimal(10, 2)
+  total          Decimal       @db.Decimal(10, 2)
+  paymentMethod  PaymentMethod @default(CASH)
+  status         SaleStatus    @default(COMPLETED)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  customer     Customer?    @relation(fields: [customerId], references: [id])
+  items        SaleItem[]
+
+  @@unique([tenantId, saleNumber])
+  @@index([tenantId])
+  @@index([tenantId, saleDate])
+  @@index([cashRegisterId])
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  MIXED
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  PENDING
+}
+
+model SaleItem {
+  id        String  @id @default(cuid())
+  saleId    String
+  productId String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2) // Precio al momento de la venta
+  discount  Decimal @default(0) @db.Decimal(10, 2)
+  subtotal  Decimal @db.Decimal(10, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+// ============================================
+// PROVEEDORES
+// ============================================
+
+model Supplier {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  nit       String?  // NIT o documento
+  email     String?
+  phone     String?
+  address   String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@index([tenantId])
+}
+
+// ============================================
+// COMPRAS (Inventario)
+// ============================================
+
+model Purchase {
+  id              String         @id @default(cuid())
+  tenantId        String
+  supplierId      String?
+  userId          String         // Usuario que registró
+  purchaseNumber  String         // Número de factura/compra
+  purchaseDate    DateTime       @default(now())
+  subtotal        Decimal        @db.Decimal(10, 2)
+  tax             Decimal        @default(0) @db.Decimal(10, 2)
+  total           Decimal        @db.Decimal(10, 2)
+  status          PurchaseStatus @default(COMPLETED)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier?      @relation(fields: [supplierId], references: [id])
+  user     User           @relation(fields: [userId], references: [id])
+  items    PurchaseItem[]
+
+  @@unique([tenantId, purchaseNumber])
+  @@index([tenantId])
+  @@index([tenantId, purchaseDate])
+}
+
+enum PurchaseStatus {
+  COMPLETED
+  CANCELLED
+  PENDING
+}
+
+model PurchaseItem {
+  id         String  @id @default(cuid())
+  purchaseId String
+  productId  String
+  quantity   Int
+  unitCost   Decimal @db.Decimal(10, 2)
+  subtotal   Decimal @db.Decimal(10, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+// ============================================
+// GASTOS
+// ============================================
+
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Expense {
+  id          String      @id @default(cuid())
+  tenantId    String
+  categoryId  String?
+  userId      String      // Usuario que registró
+  expenseDate DateTime    @default(now())
+  amount      Decimal     @db.Decimal(10, 2)
+  description String
+  paymentMethod PaymentMethod @default(CASH)
+  reference   String?     // Número de factura o referencia
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category ExpenseCategory? @relation(fields: [categoryId], references: [id])
+  user     User             @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, expenseDate])
+  @@index([categoryId])
+}
+
+// ============================================
+// PEDIDOS (REPOSICIÓN Y ENCARGOS)
+// ============================================
+
+model Order {
+  id           String      @id @default(cuid())
+  tenantId     String
+  orderNumber  String      // Número de pedido (auto-generado)
+  customerId   String?     // Cliente (solo para encargos)
+  type         OrderType   // RESTOCK o CUSTOMER_ORDER
+  status       OrderStatus @default(PENDING)
+  priority     Priority    @default(NORMAL)
+  orderDate    DateTime    @default(now())
+  expectedDate DateTime?   // Fecha esperada de llegada
+  receivedDate DateTime?   // Fecha de recepción
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer?      @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
+  history  OrderHistory[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@index([tenantId, status])
+  @@index([tenantId, orderDate])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String? // Producto existente (puede ser null para productos nuevos/encargos)
+  productName String  // Nombre del producto (copiado o escrito manualmente)
+  productSku  String? // SKU del producto
+  description String? // Descripción adicional
+  quantity    Int     @default(1)
+  unitCost    Decimal? @db.Decimal(10, 2) // Costo estimado
+  received    Boolean @default(false) // Ya se recibió este item
+  receivedQty Int     @default(0) // Cantidad recibida
+  notes       String?
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderHistory {
+  id          String   @id @default(cuid())
+  orderId     String
+  action      String   // CREATED, STATUS_CHANGED, ITEMS_UPDATED, EDITED
+  description String   // Descripción del cambio
+  oldValue    String?  // Valor anterior (JSON)
+  newValue    String?  // Valor nuevo (JSON)
+  createdAt   DateTime @default(now())
+  createdBy   String?  // Usuario que hizo el cambio
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+enum OrderType {
+  RESTOCK        // Reposición de inventario
+  CUSTOMER_ORDER // Encargo de cliente
+}
+
+enum OrderStatus {
+  PENDING    // Pendiente de pedir
+  ORDERED    // Ya se pidió al proveedor
+  PARTIAL    // Parcialmente recibido
+  RECEIVED   // Completamente recibido
+  DELIVERED  // Entregado al cliente (solo para encargos)
+  CANCELLED  // Cancelado
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// ============================================
+// ADMINISTRACIÓN - SUSCRIPCIONES Y PLANES
+// ============================================
+
+// Planes de suscripción
+model Plan {
+  id          String   @id @default(cuid())
+  code        String   @unique // "basic", "professional", "business"
+  name        String   // "Básico", "Profesional", "Negocio"
+  description String?
+
+  // Precios
+  monthlyPrice Decimal  @db.Decimal(10, 2)
+  yearlyPrice  Decimal? @db.Decimal(10, 2) // Precio anual (descuento)
+  currency     String   @default("COP")
+
+  // Límites
+  maxUsers     Int @default(1)
+  maxProducts  Int @default(500)    // -1 = ilimitado
+  maxLocations Int @default(1)      // Multi-sucursal
+
+  // Config
+  trialDays    Int     @default(15)
+  isActive     Boolean @default(true)
+  isPopular    Boolean @default(false) // Destacar en pricing
+  sortOrder    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  features      PlanFeature[]
+  subscriptions Subscription[]
+}
+
+// Features/Módulos disponibles
+model Feature {
+  id          String  @id @default(cuid())
+  code        String  @unique // Identificador único
+  name        String  // Nombre para mostrar
+  description String?
+  module      String  // Agrupación: "pos", "inventory", "reports", "workshop"
+  icon        String? // Icono para UI
+
+  createdAt DateTime @default(now())
+
+  plans PlanFeature[]
+}
+
+// Relación Plan-Feature (muchos a muchos)
+model PlanFeature {
+  id        String @id @default(cuid())
+  planId    String
+  featureId String
+
+  // Configuración específica por plan
+  config    Json?  // Ej: {"maxReports": 10, "exportFormats": ["pdf"]}
+
+  plan    Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, featureId])
+}
+
+// Suscripción de cada Tenant
+model Subscription {
+  id       String @id @default(cuid())
+  tenantId String @unique
+  planId   String
+
+  status   SubscriptionStatus @default(TRIAL)
+
+  // Fechas importantes
+  startDate       DateTime  @default(now())
+  trialEndsAt     DateTime? // Fin del período de prueba
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelledAt     DateTime?
+  suspendedAt     DateTime?
+
+  // Facturación
+  billingCycle    BillingCycle @default(MONTHLY)
+  nextBillingDate DateTime?
+
+  // Descuentos/Promociones
+  discountPercent Int?      // Descuento aplicado
+  discountEndsAt  DateTime? // Hasta cuándo aplica
+
+  // Notas internas (admin)
+  adminNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+  invoices Invoice[]
+
+  @@index([status])
+  @@index([nextBillingDate])
+}
+
+enum SubscriptionStatus {
+  TRIAL      // En período de prueba (15 días)
+  ACTIVE     // Activa y al día
+  PAST_DUE   // Pago vencido (gracia de X días)
+  SUSPENDED  // Suspendida por falta de pago
+  CANCELLED  // Cancelada por el usuario
+  EXPIRED    // Trial expirado sin pago
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+// Pagos realizados
+model Payment {
+  id             String  @id @default(cuid())
+  subscriptionId String
+  invoiceId      String?
+
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("COP")
+  status         PaymentStatus @default(PENDING)
+
+  // Método de pago
+  paymentMethod  PaymentMethodType @default(TRANSFER)
+
+  // Referencias
+  externalId     String?  // ID de pasarela (Wompi, PayU, etc.)
+  reference      String?  // Referencia de transferencia
+  receiptUrl     String?  // Comprobante
+
+  // Fechas
+  paymentDate    DateTime?
+
+  notes          String?
+  processedBy    String?  // Admin que procesó (para pagos manuales)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id])
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([paymentDate])
+}
+
+enum PaymentStatus {
+  PENDING    // Esperando pago
+  PROCESSING // En proceso (pasarela)
+  COMPLETED  // Pagado
+  FAILED     // Falló
+  REFUNDED   // Reembolsado
+  CANCELLED  // Cancelado
+}
+
+enum PaymentMethodType {
+  CASH       // Efectivo (pago en oficina)
+  TRANSFER   // Transferencia bancaria
+  CARD       // Tarjeta (pasarela)
+  PSE        // PSE (Colombia)
+  NEQUI      // Nequi
+  DAVIPLATA  // Daviplata
+  OTHER      // Otro
+}
+
+// Facturas/Invoices
+model Invoice {
+  id             String @id @default(cuid())
+  subscriptionId String
+
+  invoiceNumber  String  @unique // FAC-2024-0001
+
+  // Montos
+  subtotal       Decimal @db.Decimal(10, 2)
+  tax            Decimal @default(0) @db.Decimal(10, 2)
+  discount       Decimal @default(0) @db.Decimal(10, 2)
+  total          Decimal @db.Decimal(10, 2)
+  currency       String  @default("COP")
+
+  status         InvoiceStatus @default(DRAFT)
+
+  // Período facturado
+  periodStart    DateTime
+  periodEnd      DateTime
+
+  // Fechas
+  issueDate      DateTime @default(now())
+  dueDate        DateTime
+  paidAt         DateTime?
+
+  // PDF/Documento
+  pdfUrl         String?
+
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  payments     Payment[]
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+enum InvoiceStatus {
+  DRAFT      // Borrador
+  SENT       // Enviada
+  PAID       // Pagada
+  OVERDUE    // Vencida
+  CANCELLED  // Anulada
+}
+
+// Log de actividades del admin
+model AdminActivityLog {
+  id          String   @id @default(cuid())
+  userId      String   // Usuario que realizó la acción (super admin)
+
+  action      String   // "tenant.activate", "subscription.update", etc.
+  entityType  String   // "tenant", "subscription", "payment"
+  entityId    String   // ID del registro afectado
+
+  description String   // Descripción legible
+  oldValue    Json?    // Valor anterior
+  newValue    Json?    // Valor nuevo
+
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
