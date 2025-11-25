@@ -50,6 +50,7 @@ export default async function OrdersPage() {
 
   return (
     <OrdersPageClient
+    //@ts-ignore
       restock={serializedRestock}
       customerOrders={serializedCustomerOrders}
       customers={serializedCustomers}

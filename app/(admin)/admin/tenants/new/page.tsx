@@ -1,6 +1,8 @@
 import { getPlans } from '@/app/actions/admin/tenants'
 import { NewTenantForm } from '@/components/admin/new-tenant-form'
 
+export const dynamic = 'force-dynamic'
+
 export default async function NewTenantPage() {
   const plans = await getPlans()
 

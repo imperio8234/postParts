@@ -32,7 +32,7 @@ export const authOptions: NextAuthOptions = {
           },
         })
 
-        if (!user || !user.tenant.isActive) {
+        if (!user || !user.tenant || !user.tenant.isActive) {
           return null
         }
 
@@ -46,7 +46,7 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
-          tenantId: user.tenantId,
+          tenantId: user.tenantId ?? undefined,
           tenantName: user.tenant.name,
           role: user.role,
         }

@@ -247,7 +247,7 @@ export async function updateTenantSubscription(
         description: `Actualizó suscripción a plan "${plan.name}"`,
         oldValue: currentSubscription
           ? { plan: currentSubscription.plan.code, status: currentSubscription.status }
-          : null,
+          : undefined,
         newValue: { plan: plan.code, status: data.status },
       },
     }),

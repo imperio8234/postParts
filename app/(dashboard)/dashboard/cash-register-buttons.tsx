@@ -70,13 +70,7 @@ export function CloseCashRegisterButton({ cashRegisterId }: { cashRegisterId: st
   const [cashAmount, setCashAmount] = useState('')
   const [cardAmount, setCardAmount] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
-  const [notes, setNotes] = useState('')
-
-  useEffect(() => {
-    if (showForm) {
-      loadSummary()
-    }
-  }, [showForm])
+  const [notes, setNotes] = useState('');
 
   const loadSummary = async () => {
     const data = await getCashRegisterSummary(cashRegisterId)
@@ -88,6 +82,14 @@ export function CloseCashRegisterButton({ cashRegisterId }: { cashRegisterId: st
     }
   }
 
+
+  useEffect(() => {
+    if (showForm) {
+      loadSummary()
+    }
+  }, [showForm])
+
+  
   const handleClose = async () => {
     if (!cashAmount) {
       alert('Ingresa el efectivo contado')

@@ -47,7 +47,7 @@ interface Tenant {
   plan: string
   planCode: string
   subscriptionStatus: string
-  trialEndsAt: Date | null
+  trialEndsAt: Date | null | undefined
   usersCount: number
   productsCount: number
   salesCount: number

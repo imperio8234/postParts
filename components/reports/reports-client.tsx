@@ -393,7 +393,7 @@ export function ReportsClient() {
       {!salesReport && !expensesReport && !profitReport && (
         <Card>
           <CardContent className="py-12 text-center text-gray-500">
-            Selecciona un rango de fechas y haz clic en "Generar Reportes"
+            Selecciona un rango de fechas y haz clic en Generar Reportes
           </CardContent>
         </Card>
       )}

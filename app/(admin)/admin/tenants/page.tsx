@@ -1,6 +1,8 @@
 import { getTenants, getPlans } from '@/app/actions/admin/tenants'
 import { TenantsListClient } from '@/components/admin/tenants-list-client'
 
+export const dynamic = 'force-dynamic'
+
 export default async function TenantsPage() {
   const [tenants, plans] = await Promise.all([
     getTenants(),
@@ -17,6 +19,7 @@ export default async function TenantsPage() {
       </div>
 
       <TenantsListClient
+      //@ts-ignore
         initialTenants={tenants}
         plans={plans.map((p) => ({ code: p.code, name: p.name }))}
       />
