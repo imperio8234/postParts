@@ -91,7 +91,7 @@ export function OrderDetailModal({ order, isOpen, onClose, onStatusChange }: Pro
             <div>
               <h2 className="text-xl font-bold">{order.orderNumber}</h2>
               <p className="text-sm text-gray-500">
-                {order.type === 'CUSTOMER_ORDER' ? 'Encargo de Cliente' : 'Pedido de Reposición'}
+                {order.type === 'CUSTOMER_ORDER' ? 'Encargo de Cliente' : 'Reposición de Stock'}
               </p>
             </div>
           </div>

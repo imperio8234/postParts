@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getCurrentTenantId, getCurrentUser } from '@/lib/tenant'
+import { Decimal } from '@prisma/client/runtime/library'
+import { canAddProduct } from '@/lib/subscription'
 
 export type OrderItemInput = {
   id?: string
@@ -12,7 +14,9 @@ export type OrderItemInput = {
   description?: string
   quantity: number
   unitCost?: number
+  salePrice?: number
   notes?: string
+  createProduct?: boolean
 }
 
 export type CreateOrderInput = {
@@ -84,6 +88,56 @@ export async function createOrder(data: CreateOrderInput) {
     throw new Error('El pedido debe tener al menos un item')
   }
 
+  // Crear productos nuevos si están marcados para crear
+  const itemsToCreate = data.items.filter((item) => item.createProduct && !item.productId)
+  const createdProductsMap = new Map<number, string>() // Map index -> productId
+
+  for (let i = 0; i < data.items.length; i++) {
+    const item = data.items[i]
+    if (item.createProduct && !item.productId) {
+      // Validar campos requeridos
+      if (!item.productSku || !item.unitCost || !item.salePrice) {
+        throw new Error(`El item "${item.productName}" necesita SKU, precio de costo y precio de venta para crear el producto`)
+      }
+
+      // Verificar límite de productos
+      const canAdd = await canAddProduct()
+      if (!canAdd.allowed) {
+        throw new Error(canAdd.message || 'No puedes agregar más productos con tu plan actual')
+      }
+
+      // Verificar que el SKU no exista
+      const existing = await prisma.product.findUnique({
+        where: {
+          tenantId_sku: {
+            tenantId,
+            sku: item.productSku,
+          },
+        },
+      })
+
+      if (existing) {
+        // Si el producto ya existe, usar ese ID
+        createdProductsMap.set(i, existing.id)
+      } else {
+        // Crear el nuevo producto
+        const newProduct = await prisma.product.create({
+          data: {
+            tenantId,
+            sku: item.productSku,
+            name: item.productName,
+            description: item.description || undefined,
+            costPrice: new Decimal(item.unitCost),
+            salePrice: new Decimal(item.salePrice),
+            stock: 0, // Stock inicial en 0
+            minStock: 5,
+          },
+        })
+        createdProductsMap.set(i, newProduct.id)
+      }
+    }
+  }
+
   const orderNumber = await generateOrderNumber(tenantId)
 
   const order = await prisma.order.create({
@@ -96,8 +150,8 @@ export async function createOrder(data: CreateOrderInput) {
       expectedDate: data.expectedDate,
       notes: data.notes,
       items: {
-        create: data.items.map((item) => ({
-          productId: item.productId,
+        create: data.items.map((item, index) => ({
+          productId: createdProductsMap.get(index) || item.productId,
           productName: item.productName,
           productSku: item.productSku,
           description: item.description,
@@ -109,10 +163,15 @@ export async function createOrder(data: CreateOrderInput) {
       history: {
         create: {
           action: 'CREATED',
-          description: `Pedido creado con ${data.items.length} item(s)`,
+          description: `Pedido creado con ${data.items.length} item(s)${
+            createdProductsMap.size > 0
+              ? `. Se crearon ${createdProductsMap.size} producto(s) nuevo(s) en el inventario`
+              : ''
+          }`,
           newValue: JSON.stringify({
             type: data.type,
             items: data.items.map((i) => ({ name: i.productName, qty: i.quantity })),
+            productsCreated: createdProductsMap.size,
           }),
           createdBy: user?.name || 'Sistema',
         },
@@ -129,6 +188,7 @@ export async function createOrder(data: CreateOrderInput) {
   })
 
   revalidatePath('/dashboard/replenishment')
+  revalidatePath('/dashboard/products')
   return order
 }
 
@@ -358,6 +418,9 @@ export async function updateOrderStatus(
 
   const order = await prisma.order.findUnique({
     where: { id },
+    include: {
+      items: true,
+    },
   })
 
   if (!order || order.tenantId !== tenantId) {
@@ -371,6 +434,42 @@ export async function updateOrderStatus(
     RECEIVED: 'Recibido',
     DELIVERED: 'Entregado',
     CANCELLED: 'Cancelado',
+  }
+
+  // Si se marca como RECEIVED y es un pedido de RESTOCK, actualizar inventario
+  if (status === 'RECEIVED' && order.type === 'RESTOCK') {
+    // Actualizar stock de cada producto
+    for (const item of order.items) {
+      if (item.productId) {
+        // Actualizar stock del producto
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: {
+            stock: {
+              increment: item.quantity,
+            },
+          },
+        })
+
+        // Marcar item como recibido
+        await prisma.orderItem.update({
+          where: { id: item.id },
+          data: {
+            received: true,
+            receivedQty: item.quantity,
+          },
+        })
+      }
+    }
+
+    // Registrar actualización de inventario en historial
+    const totalItems = order.items.length
+    const productsUpdated = order.items.filter(i => i.productId).length
+    await addOrderHistory(
+      id,
+      'INVENTORY_UPDATED',
+      `Inventario actualizado: ${productsUpdated} de ${totalItems} productos recibidos`
+    )
   }
 
   const updated = await prisma.order.update({
@@ -391,6 +490,7 @@ export async function updateOrderStatus(
   )
 
   revalidatePath('/dashboard/replenishment')
+  revalidatePath('/dashboard/products')
   return updated
 }
 

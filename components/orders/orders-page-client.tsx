@@ -46,12 +46,12 @@ export function OrdersPageClient({ restock, customerOrders, customers, products 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Reposición</CardTitle>
+            <CardTitle className="text-sm font-medium">Reposición de Stock</CardTitle>
             <Package className="w-4 h-4 text-orange-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">{restock.length}</div>
-            <p className="text-xs text-gray-500">pedidos de reposición</p>
+            <p className="text-xs text-gray-500">reposiciones de stock</p>
           </CardContent>
         </Card>
 

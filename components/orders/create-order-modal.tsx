@@ -48,7 +48,9 @@ type OrderItemForm = {
   description: string
   quantity: number
   unitCost: string
+  salePrice: string
   notes: string
+  createProduct: boolean
 }
 
 export function CreateOrderModal({ customers, products, isOpen, onClose }: Props) {
@@ -60,6 +62,7 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState<'config' | 'items'>('config')
+  const [showMoreProducts, setShowMoreProducts] = useState(false)
 
   const [orderData, setOrderData] = useState({
     priority: 'NORMAL' as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT',
@@ -96,7 +99,9 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
       description: '',
       quantity: 1,
       unitCost: product?.costPrice?.toString() || '',
+      salePrice: '',
       notes: '',
+      createProduct: !product, // Si no hay producto, marcar para crear
     }
     setItems([...items, newItem])
     setSearchProduct('')
@@ -104,7 +109,7 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
     setActiveTab('items')
   }
 
-  const updateItem = (id: string, field: keyof OrderItemForm, value: string | number | null) => {
+  const updateItem = (id: string, field: keyof OrderItemForm, value: string | number | boolean | null) => {
     setItems(
       items.map((item) =>
         item.id === id ? { ...item, [field]: value } : item
@@ -131,6 +136,26 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
       return
     }
 
+    // Validar items que se van a crear como productos
+    const itemsToCreateAsProduct = items.filter((item) => item.createProduct)
+    for (const item of itemsToCreateAsProduct) {
+      if (!item.productSku) {
+        setError('Los productos a crear deben tener un SKU')
+        setActiveTab('items')
+        return
+      }
+      if (!item.unitCost || parseFloat(item.unitCost) <= 0) {
+        setError('Los productos a crear deben tener un precio de costo')
+        setActiveTab('items')
+        return
+      }
+      if (!item.salePrice || parseFloat(item.salePrice) <= 0) {
+        setError('Los productos a crear deben tener un precio de venta')
+        setActiveTab('items')
+        return
+      }
+    }
+
     startTransition(async () => {
       try {
         await createOrder({
@@ -146,7 +171,9 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
             description: item.description || undefined,
             quantity: item.quantity,
             unitCost: item.unitCost ? parseFloat(item.unitCost) : undefined,
+            salePrice: item.salePrice ? parseFloat(item.salePrice) : undefined,
             notes: item.notes || undefined,
+            createProduct: item.createProduct,
           })),
         })
 
@@ -167,6 +194,7 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
     setSearchCustomer('')
     setError('')
     setActiveTab('config')
+    setShowMoreProducts(false)
   }
 
   const handleClose = () => {
@@ -192,7 +220,7 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
             <div>
               <h2 className="text-lg sm:text-xl font-bold">Nuevo Pedido</h2>
               <p className="text-xs sm:text-sm text-orange-100 hidden sm:block">
-                {type === 'CUSTOMER_ORDER' ? 'Encargo de Cliente' : 'Reposición de Inventario'}
+                {type === 'CUSTOMER_ORDER' ? 'Encargo de Cliente' : 'Reposición de Stock'}
               </p>
             </div>
           </div>
@@ -228,10 +256,9 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          <div className="h-full lg:grid lg:grid-cols-2">
-            {/* Panel izquierdo - Configuración */}
-            <div className={`h-full overflow-y-auto p-4 lg:border-r ${activeTab === 'config' ? 'block' : 'hidden lg:block'}`}>
+        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+          {/* Panel izquierdo - Configuración */}
+          <div className={`flex-1 overflow-y-auto p-4 lg:border-r ${activeTab === 'config' ? 'block' : 'hidden lg:block'}`}>
               <h3 className="font-semibold mb-4 hidden lg:block">Configuración del Pedido</h3>
 
               {/* Tipo */}
@@ -256,7 +283,7 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
                     size="sm"
                   >
                     <Package className="w-4 h-4 mr-1" />
-                    Reposición
+                    Reposición de Stock
                   </Button>
                 </div>
               </div>
@@ -357,31 +384,58 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
                   <Input
                     placeholder="Buscar por nombre o SKU..."
                     value={searchProduct}
-                    onChange={(e) => setSearchProduct(e.target.value)}
+                    onChange={(e) => {
+                      setSearchProduct(e.target.value)
+                      setShowMoreProducts(false)
+                    }}
                     className="pl-10"
                   />
                 </div>
 
                 {/* Lista de productos */}
-                <div className="mt-2 max-h-36 overflow-y-auto border rounded bg-white">
-                  {filteredProducts.slice(0, 8).map((p) => (
-                    <div
-                      key={p.id}
-                      className="p-2 hover:bg-green-50 cursor-pointer flex justify-between items-center border-b last:border-0 active:bg-green-100"
-                      onClick={() => addItem(p)}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{p.name}</p>
-                        <p className="text-xs text-gray-500">
-                          SKU: {p.sku} | Stock: {p.stock}
-                        </p>
-                      </div>
-                      <div className="ml-2 shrink-0">
-                        <Plus className="w-5 h-5 text-green-600" />
-                      </div>
+                {filteredProducts.length > 0 && (
+                  <div className="mt-2 border rounded bg-white">
+                    <div className="max-h-36 overflow-y-auto">
+                      {filteredProducts.slice(0, showMoreProducts ? 10 : 3).map((p) => (
+                        <div
+                          key={p.id}
+                          className="p-2 hover:bg-green-50 cursor-pointer flex justify-between items-center border-b last:border-0 active:bg-green-100"
+                          onClick={() => addItem(p)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{p.name}</p>
+                            <p className="text-xs text-gray-500">
+                              SKU: {p.sku} | Stock: {p.stock}
+                            </p>
+                          </div>
+                          <div className="ml-2 shrink-0">
+                            <Plus className="w-5 h-5 text-green-600" />
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+
+                    {/* Botón Ver más / Ver menos */}
+                    {filteredProducts.length > 3 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMoreProducts(!showMoreProducts)}
+                        className="w-full py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 border-t transition-colors"
+                      >
+                        {showMoreProducts
+                          ? `Ver menos`
+                          : `Ver más (${filteredProducts.length - 3} productos más)`
+                        }
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {searchProduct && filteredProducts.length === 0 && (
+                  <div className="mt-2 p-4 text-center text-sm text-gray-500 border rounded bg-gray-50">
+                    No se encontraron productos
+                  </div>
+                )}
 
                 {/* Botón agregar manual - SIEMPRE VISIBLE */}
                 <Button
@@ -396,8 +450,8 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
               </div>
             </div>
 
-            {/* Panel derecho - Items del pedido */}
-            <div className={`h-full overflow-y-auto p-4 bg-gray-50 ${activeTab === 'items' ? 'block' : 'hidden lg:block'}`}>
+          {/* Panel derecho - Items del pedido */}
+          <div className={`flex-1 overflow-y-auto p-4 bg-gray-50 ${activeTab === 'items' ? 'block' : 'hidden lg:block'}`}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold">Items del Pedido</h3>
                 <span className="text-sm bg-orange-100 text-orange-800 px-2 py-1 rounded font-medium">
@@ -487,6 +541,66 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
                           value={item.description}
                           onChange={(e) => updateItem(item.id, 'description', e.target.value)}
                         />
+
+                        {/* Mostrar opción de crear producto solo para items manuales */}
+                        {!item.productId && (
+                          <div className="border-t pt-3 mt-3 space-y-2">
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                id={`create-product-${item.id}`}
+                                checked={item.createProduct}
+                                onChange={(e) => updateItem(item.id, 'createProduct', e.target.checked)}
+                                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <label
+                                htmlFor={`create-product-${item.id}`}
+                                className="text-sm text-gray-700 cursor-pointer select-none"
+                              >
+                                <span className="font-medium">Crear producto en inventario</span>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  Este producto se agregará al catálogo para futuras ventas
+                                </p>
+                              </label>
+                            </div>
+
+                            {item.createProduct && (
+                              <div className="ml-6 space-y-2 bg-blue-50 p-2 rounded border border-blue-200">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-xs text-gray-700 font-medium">
+                                      Precio Venta *
+                                    </label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="$0"
+                                      value={item.salePrice}
+                                      onChange={(e) => updateItem(item.id, 'salePrice', e.target.value)}
+                                      className="h-9 bg-white"
+                                      required={item.createProduct}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-gray-700 font-medium">
+                                      Stock inicial
+                                    </label>
+                                    <Input
+                                      type="text"
+                                      value="0"
+                                      disabled
+                                      className="h-9 bg-gray-100"
+                                      title="El producto se creará con stock 0 hasta que llegue el pedido"
+                                    />
+                                  </div>
+                                </div>
+                                <p className="text-xs text-blue-700">
+                                  El producto se creará con stock 0. El stock se actualizará cuando el pedido sea recibido.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -503,7 +617,6 @@ export function CreateOrderModal({ customers, products, isOpen, onClose }: Props
                   </Button>
                 </div>
               )}
-            </div>
           </div>
         </div>
 

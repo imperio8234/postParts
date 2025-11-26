@@ -163,7 +163,7 @@ export function OrdersList({ restock, customerOrders, products }: Props) {
                 onClick={() => setActiveTab('restock')}
               >
                 <Package className="w-4 h-4 mr-1" />
-                Reposición ({restock.length})
+                Reposición de Stock ({restock.length})
               </Button>
               <Button
                 variant={activeTab === 'orders' ? 'default' : 'outline'}
@@ -192,7 +192,7 @@ export function OrdersList({ restock, customerOrders, products }: Props) {
           {orders.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               {activeTab === 'restock'
-                ? 'No hay pedidos de reposición pendientes'
+                ? 'No hay reposiciones de stock pendientes'
                 : 'No hay encargos pendientes'}
             </div>
           ) : (
