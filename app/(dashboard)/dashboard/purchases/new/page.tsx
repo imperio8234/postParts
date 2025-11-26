@@ -1,4 +1,4 @@
-import { getProducts } from '@/app/actions/products'
+import { getAllProducts } from '@/app/actions/products'
 import { getSuppliers } from '@/app/actions/suppliers'
 import { NewPurchaseForm } from '@/components/purchases/new-purchase-form'
 import Link from 'next/link'
@@ -7,7 +7,7 @@ import { ArrowLeft } from 'lucide-react'
 
 export default async function NewPurchasePage() {
   const [products, suppliers] = await Promise.all([
-    getProducts(),
+    getAllProducts(),
     getSuppliers(),
   ])
 

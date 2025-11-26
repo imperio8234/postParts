@@ -22,7 +22,10 @@ model Tenant {
   phone     String?
   address   String?
   city      String?
+  country   String?  @default("Colombia") // País
   logo      String?
+  website   String?  // Sitio web (opcional)
+  taxRegime String?  // Régimen tributario (opcional)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

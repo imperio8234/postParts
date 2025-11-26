@@ -1,13 +1,13 @@
 import { getPendingOrders } from '@/app/actions/orders'
 import { getCustomers } from '@/app/actions/customers'
-import { getProducts } from '@/app/actions/products'
+import { getAllProducts } from '@/app/actions/products'
 import { OrdersPageClient } from '@/components/orders/orders-page-client'
 
 export default async function OrdersPage() {
   const [{ restock, customerOrders }, customers, products] = await Promise.all([
     getPendingOrders(),
     getCustomers(),
-    getProducts(),
+    getAllProducts(),
   ])
 
   const serializedCustomers = customers.map((c) => ({

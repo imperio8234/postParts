@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { Decimal } from '@prisma/client/runtime/library'
+import { Prisma } from '@prisma/client'
 import { canAddProduct } from '@/lib/subscription'
 
 export type CreateProductInput = {
@@ -91,28 +92,31 @@ export async function updateProduct(id: string, data: Partial<CreateProductInput
   return updated
 }
 
-export async function getProducts(search?: string) {
+// Obtener todos los productos (sin paginación) - para formularios y selects
+export async function getAllProducts(search?: string) {
   const tenantId = await getCurrentTenantId()
 
   if (!tenantId) {
     return []
   }
 
+  const where: Prisma.ProductWhereInput = {
+    tenantId,
+    isActive: true,
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { sku: { contains: search, mode: 'insensitive' as const } },
+            { barcode: { contains: search, mode: 'insensitive' as const } },
+            { brand: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {}),
+  }
+
   return await prisma.product.findMany({
-    where: {
-      tenantId,
-      isActive: true,
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { sku: { contains: search, mode: 'insensitive' } },
-              { barcode: { contains: search, mode: 'insensitive' } },
-              { brand: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    },
+    where,
     include: {
       category: true,
     },
@@ -120,6 +124,68 @@ export async function getProducts(search?: string) {
       name: 'asc',
     },
   })
+}
+
+// Tipo para producto con categoría incluida
+type ProductWithCategory = Prisma.ProductGetPayload<{
+  include: { category: true }
+}>
+
+// Obtener productos con paginación - para listados
+export async function getProducts(
+  search?: string,
+  page: number = 1,
+  limit: number = 50
+): Promise<{
+  products: ProductWithCategory[]
+  total: number
+  totalPages: number
+  currentPage: number
+}> {
+  const tenantId = await getCurrentTenantId()
+
+  if (!tenantId) {
+    return { products: [], total: 0, totalPages: 0, currentPage: page }
+  }
+
+  const skip = (page - 1) * limit
+
+  const where: Prisma.ProductWhereInput = {
+    tenantId,
+    isActive: true,
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { sku: { contains: search, mode: 'insensitive' as const } },
+            { barcode: { contains: search, mode: 'insensitive' as const } },
+            { brand: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {}),
+  }
+
+  const [products, total] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      include: {
+        category: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+      skip,
+      take: limit,
+    }),
+    prisma.product.count({ where }),
+  ])
+
+  return {
+    products,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+  }
 }
 
 export async function getProductByBarcode(barcode: string) {

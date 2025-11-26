@@ -1,0 +1,22 @@
+{
+  "name": "Moto Parts POS",
+  "short_name": "Moto POS",
+  "description": "Sistema de punto de venta para repuestos de motos",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/pos.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "scope": "/",
+  "related_applications": [],
+  "prefer_related_applications": false
+}

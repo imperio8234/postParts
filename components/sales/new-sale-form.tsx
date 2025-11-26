@@ -37,13 +37,25 @@ type Customer = {
   phone: string | null
 }
 
+type BusinessInfo = {
+  name: string
+  nit: string
+  address: string
+  city: string
+  country: string
+  phone: string
+  website?: string
+  taxRegime?: string
+}
+
 type Props = {
   products: Product[]
   customers: Customer[]
   userName: string
+  businessInfo: BusinessInfo
 }
 
-export function NewSaleForm({ products, customers, userName }: Props) {
+export function NewSaleForm({ products, customers, userName, businessInfo }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const barcodeInputRef = useRef<HTMLInputElement>(null)
@@ -180,7 +192,10 @@ export function NewSaleForm({ products, customers, userName }: Props) {
           notes: notes || undefined,
         })
 
-        // Imprimir si se solicitó
+        // TODO: IMPLEMENTACIÓN TEMPORAL DE IMPRESIÓN
+        // Actualmente se abre una ventana con la factura en HTML para imprimir como PDF
+        // Cuando se implemente el plugin de impresión, esto enviará los datos directamente
+        // a la impresora térmica
         if (shouldPrint) {
           const printItems = cart.map((item) => ({
             name: item.product.name,
@@ -197,6 +212,7 @@ export function NewSaleForm({ products, customers, userName }: Props) {
             subtotal,
             globalDiscount,
             total,
+            businessInfo,
             selectedCustomer?.name,
             notes
           )

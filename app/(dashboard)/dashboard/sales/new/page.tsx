@@ -1,6 +1,7 @@
-import { getProducts } from '@/app/actions/products'
+import { getAllProducts } from '@/app/actions/products'
 import { getCustomers } from '@/app/actions/customers'
 import { getCurrentUser } from '@/lib/tenant'
+import { getBusinessSettings } from '@/app/actions/settings'
 import { NewSaleForm } from '@/components/sales/new-sale-form'
 import { CartProvider } from '@/lib/cart-context'
 import Link from 'next/link'
@@ -8,10 +9,11 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 
 export default async function NewSalePage() {
-  const [products, customers, user] = await Promise.all([
-    getProducts(),
+  const [products, customers, user, businessSettings] = await Promise.all([
+    getAllProducts(),
     getCustomers(),
     getCurrentUser(),
+    getBusinessSettings(),
   ])
 
   const serializedProducts = products.map((p) => ({
@@ -30,6 +32,17 @@ export default async function NewSalePage() {
     phone: c.phone,
   }))
 
+  const businessInfo = {
+    name: businessSettings?.name || 'Mi Negocio',
+    nit: businessSettings?.nit || '000.000.000',
+    address: businessSettings?.address || 'Dirección del negocio',
+    city: businessSettings?.city || 'Ciudad',
+    country: businessSettings?.country || 'Colombia',
+    phone: businessSettings?.phone || '3000000000',
+    website: businessSettings?.website || undefined,
+    taxRegime: businessSettings?.taxRegime || undefined,
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -47,6 +60,7 @@ export default async function NewSalePage() {
           products={serializedProducts}
           customers={serializedCustomers}
           userName={user?.name || 'Usuario'}
+          businessInfo={businessInfo}
         />
       </CartProvider>
     </div>

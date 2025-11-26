@@ -10,11 +10,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Pagination } from '@/components/ui/pagination'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 
-export default async function SalesPage() {
-  const sales = await getSales(50)
+type Props = {
+  searchParams: { page?: string }
+}
+
+export default async function SalesPage({ searchParams }: Props) {
+  const page = Number(searchParams.page) || 1
+  const { sales, total, totalPages, currentPage } = await getSales(page, 50)
 
   return (
     <div className="space-y-6">
@@ -89,6 +95,8 @@ export default async function SalesPage() {
               )}
             </TableBody>
           </Table>
+
+          <Pagination currentPage={currentPage} totalPages={totalPages} total={total} />
         </CardContent>
       </Card>
     </div>

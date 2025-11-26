@@ -16,6 +16,8 @@ import {
   LogOut,
   ChevronRight,
   Wallet,
+  Settings,
+  MessageCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { signOut } from 'next-auth/react'
@@ -39,6 +41,7 @@ const menuItems = [
   { href: '/dashboard/replenishment', label: 'Pedidos', icon: ClipboardList },
   { href: '/dashboard/cash-history', label: 'Historial Caja', icon: Wallet },
   { href: '/dashboard/reports', label: 'Reportes', icon: BarChart3 },
+  { href: '/dashboard/settings', label: 'Configuración', icon: Settings },
 ]
 
 export function Sidebar({ session }: Props) {
@@ -57,7 +60,14 @@ export function Sidebar({ session }: Props) {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b shadow-sm">
         <div className="flex items-center justify-between px-4 h-16">
-          <h1 className="text-lg font-bold text-primary">Moto Parts POS</h1>
+          <div>
+            <h1 className="text-lg font-bold text-primary">Moto Parts POS</h1>
+            {session.user.tenantName && (
+              <p className="text-xs text-gray-600 truncate max-w-[200px]">
+                {session.user.tenantName}
+              </p>
+            )}
+          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -86,8 +96,13 @@ export function Sidebar({ session }: Props) {
         `}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b">
+        <div className="h-16 flex flex-col justify-center px-6 border-b">
           <h1 className="text-xl font-bold text-primary">Moto Parts POS</h1>
+          {session.user.tenantName && (
+            <p className="text-xs text-gray-600 mt-0.5 truncate">
+              {session.user.tenantName}
+            </p>
+          )}
         </div>
 
         {/* Navigation */}
@@ -118,8 +133,8 @@ export function Sidebar({ session }: Props) {
           })}
         </nav>
 
-        {/* User Info & Logout */}
-        <div className="border-t p-4">
+        {/* User Info & Actions */}
+        <div className="border-t p-4 space-y-2">
           <div className="mb-3">
             <p className="font-medium text-sm text-gray-900 truncate">
               {session.user.name}
@@ -128,6 +143,24 @@ export function Sidebar({ session }: Props) {
               {session.user.tenantName || session.user.email}
             </p>
           </div>
+
+          {/* Botón de Soporte - WhatsApp */}
+          <a
+            href="https://wa.me/573205318658"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-green-500 text-green-600 hover:bg-green-50"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Soporte
+            </Button>
+          </a>
+
           <Button
             variant="outline"
             size="sm"

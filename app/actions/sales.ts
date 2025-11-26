@@ -136,40 +136,55 @@ export async function createSale(data: CreateSaleInput) {
   return sale
 }
 
-export async function getSales(limit = 50) {
+export async function getSales(page: number = 1, limit: number = 50) {
   const tenantId = await getCurrentTenantId()
 
   if (!tenantId) {
-    return []
+    return { sales: [], total: 0, totalPages: 0, currentPage: page }
   }
 
-  return await prisma.sale.findMany({
-    where: {
-      tenantId,
-    },
-    include: {
-      customer: true,
-      user: {
-        select: {
-          name: true,
+  const skip = (page - 1) * limit
+
+  const where = {
+    tenantId,
+  }
+
+  const [sales, total] = await Promise.all([
+    prisma.sale.findMany({
+      where,
+      include: {
+        customer: true,
+        user: {
+          select: {
+            name: true,
+          },
         },
-      },
-      items: {
-        include: {
-          product: {
-            select: {
-              name: true,
-              sku: true,
+        items: {
+          include: {
+            product: {
+              select: {
+                name: true,
+                sku: true,
+              },
             },
           },
         },
       },
-    },
-    orderBy: {
-      saleDate: 'desc',
-    },
-    take: limit,
-  })
+      orderBy: {
+        saleDate: 'desc',
+      },
+      skip,
+      take: limit,
+    }),
+    prisma.sale.count({ where }),
+  ])
+
+  return {
+    sales,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+  }
 }
 
 export async function getSaleById(id: string) {
